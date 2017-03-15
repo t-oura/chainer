@@ -5,6 +5,8 @@ import numpy
 import cupy
 from cupy import testing
 
+import six
+
 
 @testing.gpu
 class TestSumprod(unittest.TestCase):
@@ -150,6 +152,10 @@ class TestSumprod(unittest.TestCase):
         return xp.prod(a, axis=1)
 
 
+axes = [0, 1, 2]
+
+
+@testing.parameterize(*testing.product({'axis': axes}))
 @testing.gpu
 class TestCumsum(unittest.TestCase):
 
@@ -166,3 +172,22 @@ class TestCumsum(unittest.TestCase):
     def test_cumsum_2dim(self, xp, dtype):
         a = testing.shaped_arange((4, 5), xp, dtype)
         return xp.cumsum(a)
+
+    @testing.for_all_dtypes()
+    @testing.numpy_cupy_allclose()
+    def test_cumsum_axis(self, xp, dtype):
+        n = len(axes)
+        a = testing.shaped_arange(tuple(six.moves.range(4, 4 + n)), xp, dtype)
+        return xp.cumsum(a, axis=self.axis)
+
+    @testing.for_all_dtypes()
+    @testing.numpy_cupy_raises()
+    def test_invalid_axis_lower(self, xp, dtype):
+        a = testing.shaped_arange((4, 5), xp, dtype)
+        return xp.cumsum(a, axis=-a.ndim - 1)
+
+    @testing.for_all_dtypes()
+    @testing.numpy_cupy_raises()
+    def test_invalid_axis_upper(self, xp, dtype):
+        a = testing.shaped_arange((4, 5), xp, dtype)
+        return xp.cumsum(a, axis=a.ndim + 1)
