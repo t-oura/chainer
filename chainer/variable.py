@@ -310,10 +310,22 @@ Actual: {0}'''.format(type(data))
                 self._grad += src_grad
 
     def extractgrad(self):
-        return self._grad
+        dst = self._grad
+        dst_dev = cuda.get_device(self.data)
+
+        if dst_dev.id < 0:
+            return self._grad
+        elif dst is None:
+            return
+        else:
+            return cuda.to_cpu(dst)
 
     def setgrad(self, grad):
-        self._grad = grad
+        dst = self._grad
+        dst_dev = cuda.get_device(self.data)
+
+        if dst_dev.id < 0:
+            self._grad = cuda.to_gpu(grad, device=dst_dev)
 
     def set_creator(self, gen_func):
         """Notifies the variable that the given function is its creator.
