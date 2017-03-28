@@ -472,15 +472,20 @@ class Link(object):
 
     def extractgrads(self):
         dst = self.__dict__
+        my_name = self.name if self.name is not None else 'None'
         out = {}
         for name in self._params:
-            out[self.name+':'+name] = dst[name].extractgrad()
+            tmp = dst[name].extractgrad()
+            if tmp is not None:
+                out[my_name+':'+name] = tmp
         return out
 
     def setgrads(self, gradsdict):
+        my_name = self.name if self.name is not None else 'None'
         dst = self.__dict__
         for name in self._params:
-            dst[name].setgrad(gradsdict[self.name+':'+name])
+            if my_name+':'+name in gradsdict:
+                dst[name].setgrad(gradsdict[self.name+':'+name])
             
     def serialize(self, serializer):
         """Serializes the link object.
@@ -697,20 +702,23 @@ class Chain(Link):
             dst[name].addgrads(src[name])
 
     def extractgrads(self):
-        out = {self.name+':'+k:v 
-               for k, v in super(Chain, self).extractgrads().items()}
+        out = super(Chain, self).extractgrads()
         dst = self.__dict__
         for name in self._children:
             out.update(dst[name].extractgrads())
+
+        my_name = self.name if self.name is not None else 'None'
+        out = {my_name+':'+k:v for k,v in out.items()}
         return out
 
     def setgrads(self, gradsdict):
-        mygrads = {k.partion(':')[-1]:v 
-                   for k, v in gradsdict.items() if k.partition(':')[0] == self.name}
+        my_name = self.name if self.name is not None else 'None'
+        mygrads = {k.partition(':')[-1]:v 
+                   for k, v in gradsdict.items() if k.partition(':')[0] == my_name}
         super(Chain, self).setgrads(mygrads)
         dst = self.__dict__
         for name in self._children:
-            dst[name].setgrads(gradsdict)
+            dst[name].setgrads(mygrads)
 
     def serialize(self, serializer):
         super(Chain, self).serialize(serializer)
@@ -856,19 +864,22 @@ class ChainList(Link):
             child.addgrads(link[idx])
 
     def extractgrads(self):
-        out = {self.name+':'+k:v 
-               for k, v in super(ChainList, self).extractgrads().items()}
+        out = super(ChainList, self).extractgrads()
         for idx, child in enumerate(self._children):
             out.update(child.extractgrads())
+
+        my_name = self.name if self.name is not None else 'None'
+        out = {my_name+':'+k:v for k,v in out.items()}
         return out
 
     def setgrads(self, gradsdict):
+        my_name = self.name if self.name is not None else 'None'
         mygrads = {k.partion(':')[-1]:v 
-                   for k, v in gradsdict.items() if k.partition(':')[0] == self.name}
+                   for k, v in gradsdict.items() if k.partition(':')[0] == my_name}
         super(ChainList, self).setgrads(mygrads)
 
         for idx, child in enumerate(self._children):
-            child.setgrads(gradsdict)
+            child.setgrads(mygrads)
 
     def serialize(self, serializer):
         super(ChainList, self).serialize(serializer)
