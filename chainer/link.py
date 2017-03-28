@@ -470,6 +470,18 @@ class Link(object):
         for name in self._params:
             dst[name].addgrad(src[name])
 
+    def extractgrads(self):
+        dst = self.__dict__
+        out = {}
+        for name in self._params:
+            out[self.name+':'+name] = dst[name].extractgrad()
+        return out
+
+    def setgrads(self, gradsdict):
+        dst = self.__dict__
+        for name in self._params:
+            dst[name].setgrad(gradsdict[self.name+':'+name])
+            
     def serialize(self, serializer):
         """Serializes the link object.
 
@@ -684,6 +696,22 @@ class Chain(Link):
         for name in self._children:
             dst[name].addgrads(src[name])
 
+    def extractgrads(self):
+        out = {self.name+':'+k:v 
+               for k, v in super(Chain, self).extractgrads().items()}
+        dst = self.__dict__
+        for name in self._children:
+            out.update(dst[name].extractgrads())
+        return out
+
+    def setgrads(self, gradsdict):
+        mygrads = {k.partion(':')[-1]:v 
+                   for k, v in gradsdict.items() if k.partition(':')[0] == self.name}
+        super(Chain, self).setgrads(mygrads)
+        dst = self.__dict__
+        for name in self._children:
+            dst[name].setgrads(gradsdict)
+
     def serialize(self, serializer):
         super(Chain, self).serialize(serializer)
         d = self.__dict__
@@ -826,6 +854,21 @@ class ChainList(Link):
         super(ChainList, self).addgrads(link)
         for idx, child in enumerate(self._children):
             child.addgrads(link[idx])
+
+    def extractgrads(self):
+        out = {self.name+':'+k:v 
+               for k, v in super(ChainList, self).extractgrads().items()}
+        for idx, child in enumerate(self._children):
+            out.update(child.extractgrads())
+        return out
+
+    def setgrads(self, gradsdict):
+        mygrads = {k.partion(':')[-1]:v 
+                   for k, v in gradsdict.items() if k.partition(':')[0] == self.name}
+        super(ChainList, self).setgrads(mygrads)
+
+        for idx, child in enumerate(self._children):
+            child.setgrads(gradsdict)
 
     def serialize(self, serializer):
         super(ChainList, self).serialize(serializer)

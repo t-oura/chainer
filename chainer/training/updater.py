@@ -1,5 +1,7 @@
 import copy
 import six
+import mpi4py.MPI
+import numpy
 
 from chainer.dataset import convert
 from chainer.dataset import iterator as iterator_module
@@ -202,6 +204,56 @@ class StandardUpdater(Updater):
         self.iteration = serializer('iteration', self.iteration)
 
 
+class MPIParallelUpdater(StandardUpdater):
+    def __init__(self, iterator, optimizer, converter=convert.concat_examples,
+                 device=None, loss_func=None):
+        super(MPIParallelUpdater, self).__init__(
+            iterator=iterator,
+            optimizer=optimizer,
+            converter=converter,
+            device=device,
+            loss_func=loss_func,
+        )
+        self.comm = mpi4py.MPI.COMM_WORLD
+
+    def update_core(self):
+        batch = self._iterators['main'].next()
+        in_arrays = self.converter(batch, self.device)
+
+        optimizer = self._optimizers['main']
+        loss_func = self.loss_func or optimizer.target
+        model = optimizer.target
+
+        model.cleargrads()
+        if isinstance(in_arrays, tuple):
+            in_vars = tuple(variable.Variable(x) for x in in_arrays)
+            loss = loss_func(*in_vars)
+        elif isinstance(in_arrays, dict):
+            in_vars = {key: variable.Variable(x)
+                       for key, x in six.iteritems(in_arrays)}
+            loss = loss_func(**in_vars)
+        else:
+            in_var = variable.Variable(in_arrays)
+            loss = loss_func(in_var)
+
+        model.cleargrads()
+        loss.backward()
+        
+        grads = model.extractgrads()
+        p_name = list(grads.keys())
+        p_name.sort()
+        for p  in p_name:
+            g = grads[p]
+            buff = numpy.zeros_like(g)
+            self.comm.Allreduce([g, mpi4py.MPI.FLOAT], [buff, mpi4py.MPI.FLOAT])
+            g = buff
+
+        model.setgrads(grads)
+        optimizer.update()
+
+        self.comm.Barrier()
+
+
 class ParallelUpdater(StandardUpdater):
 
     """Implementation of a parallel GPU Updater.
@@ -319,6 +371,13 @@ class ParallelUpdater(StandardUpdater):
         for loss in losses:
             loss.backward()
 
+        grads = []
+        for model in six.itervalues(models_others):
+            grads.append(model.extractgrads())
+
+        for model in six.itervalues(models_others):
+            model.setgrads(grads[0])
+            
         for model in six.itervalues(models_others):
             model_main.addgrads(model)
 

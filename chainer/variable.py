@@ -309,6 +309,12 @@ Actual: {0}'''.format(type(data))
             with dst_dev:
                 self._grad += src_grad
 
+    def extractgrad(self):
+        return self._grad
+
+    def setgrad(self, grad):
+        self._grad = grad
+
     def set_creator(self, gen_func):
         """Notifies the variable that the given function is its creator.
 
